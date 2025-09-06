@@ -1,0 +1,73 @@
+export default {
+  async fetch(request, env) {
+    try {
+      const url = new URL(request.url);
+
+      // Inserir valor
+      if (url.pathname === "/insert" && request.method === "POST") {
+        let body;
+        try {
+          body = await request.json();
+        } catch (e) {
+          return new Response("Erro no JSON recebido: " + e.message, { status: 400 });
+        }
+
+        if (!env.IOT_01) {
+          return new Response("ERRO: Binding KV_SENSOR não encontrado!", { status: 500 });
+        }
+
+        const id = body.id || "desconhecido";
+        const mac = body.mac || "00:00:00:00:00:00";
+        const timestamp = Date.now();
+
+        // último valor global
+        await env.IOT_01.put(`rfid:last`, JSON.stringify({
+          id,
+          mac,
+          timestamp
+        }));
+
+        // histórico por MAC
+        await env.IOT_01.put(`rfid:${mac}:${timestamp}`, JSON.stringify({
+          id,
+          mac,
+          timestamp
+        }));
+
+        return new Response(`OK: RFID=${id}, MAC=${mac}`);
+      }
+
+      // Obter último cartão lido
+      if (url.pathname === "/get") {
+        const data = await env.IOT_01.get(`rfid:last`, { type: "json" });
+        if (!data) return new Response("Nenhum valor encontrado", { status: 404 });
+
+        return new Response(JSON.stringify(data, null, 2), {
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+
+      // Listar histórico por MAC
+      if (url.pathname === "/list") {
+        const mac = url.searchParams.get("mac");
+        if (!mac) return new Response("Informe ?mac=AA:BB:CC:DD:EE:FF", { status: 400 });
+
+        const { keys } = await env.IOT_01.list({ prefix: `rfid:${mac}:` });
+
+        let historico = [];
+        for (let k of keys) {
+          const val = await env.IOT_01.get(k.name, { type: "json" });
+          if (val) historico.push(val);
+        }
+
+        return new Response(JSON.stringify(historico, null, 2), {
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+
+      return new Response("Use POST /insert, GET /get ou GET /list?mac=xx:xx:xx:xx:xx:xx");
+    } catch (e) {
+      return new Response("Erro inesperado: " + e.message, { status: 500 });
+    }
+  }
+}
