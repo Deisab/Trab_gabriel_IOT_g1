@@ -1,0 +1,90 @@
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    // Função para facilitar as respostas com CORS
+    function jsonResponse(data, status = 200) {
+      return new Response(JSON.stringify(data, null, 2), {
+        status,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",   // <--- libera qualquer origem
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        },
+      });
+    }
+
+    // Responder requisições OPTIONS (necessário p/ CORS em POST)
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
+    }
+
+    // ====================== INSERT ======================
+    if (url.pathname === "/insert" && request.method === "POST") {
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return jsonResponse({ error: "Erro no JSON: " + e.message }, 400);
+      }
+
+      if (!env.IOT_01) {
+        return jsonResponse({ error: "Binding KV não encontrado!" }, 500);
+      }
+
+      const id = body.id || "unknown";
+      const record = {
+        id,
+        chuva: !!body.chuva,
+        umidade: !!body.umidade,
+        timestamp: Date.now(),
+      };
+
+      // Salva último valor
+      await env.IOT_01.put(`sensor:last:${id}`, JSON.stringify(record));
+
+      // Histórico
+      await env.IOT_01.put(`sensor:${id}:${record.timestamp}`, JSON.stringify(record));
+
+      return jsonResponse({ status: "ok", data: record });
+    }
+
+    // ====================== GET último ======================
+    if (url.pathname === "/get") {
+      const id = url.searchParams.get("id");
+      if (!id) return jsonResponse({ error: "Informe ?id=xxx" }, 400);
+
+      const data = await env.IOT_01.get(`sensor:last:${id}`, { type: "json" });
+      if (!data) return jsonResponse({ error: "Nenhum valor encontrado" }, 404);
+
+      return jsonResponse(data);
+    }
+
+    // ====================== LIST histórico ======================
+    if (url.pathname === "/list") {
+      const id = url.searchParams.get("id");
+      if (!id) return jsonResponse({ error: "Informe ?id=xxx" }, 400);
+
+      const { keys } = await env.IOT_01.list({ prefix: `sensor:${id}:` });
+      let historico = [];
+
+      for (let k of keys) {
+        const val = await env.IOT_01.get(k.name, { type: "json" });
+        if (val) historico.push(val);
+      }
+
+      return jsonResponse(historico);
+    }
+
+    return jsonResponse({
+      message: "Use POST /insert, GET /get?id=xxx ou GET /list?id=xxx",
+    });
+  }
+};

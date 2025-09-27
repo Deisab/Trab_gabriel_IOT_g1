@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>🌦 Monitor ESP32 com Controle de LEDs</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+    h1 { color: #333; }
+    #controle, #ultimo, #historico { 
+      padding: 20px; 
+      margin-bottom: 20px; 
+      background: white; 
+      border-radius: 10px; 
+      box-shadow: 0 0 10px rgba(0,0,0,0.1); 
+    }
+    pre { background: #eee; padding: 10px; border-radius: 5px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background: #ddd; }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 5px;
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover { background-color: #45a049; }
+    #status { margin-top: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>🌦 Monitor ESP32 em Tempo Real</h1>
+
+  <!-- Botão Resetar LEDs no topo -->
+  <div id="controle">
+    <button onclick="resetarLeds()">Resetar LEDs</button>
+    <p id="status">Aguardando ação...</p>
+  </div>
+
+  <!-- Última leitura -->
+  <div id="ultimo">
+    <h2>Última leitura</h2>
+    <div id="dadosUltimo">Carregando...</div>
+  </div>
+
+  <!-- Histórico -->
+  <div id="historico">
+    <h2>Histórico</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Chuva</th>
+          <th>Umidade</th>
+        </tr>
+      </thead>
+      <tbody id="tabelaHistorico">
+        <tr><td colspan="3">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const BASE_URL = "https://kv-teste.deisab12.workers.dev";
+    const DEVICE_ID = "esp32_01";
+
+    async function atualizar() {
+      try {
+        // ===== Última leitura =====
+        let resUlt = await fetch(`${BASE_URL}/get?id=${DEVICE_ID}`);
+        let ultimo = await resUlt.json();
+        document.getElementById("dadosUltimo").innerHTML = 
+          "<pre>" + JSON.stringify(ultimo, null, 2) + "</pre>";
+
+        // ===== Histórico =====
+        let resHist = await fetch(`${BASE_URL}/list?id=${DEVICE_ID}`);
+        let historico = await resHist.json();
+
+        let linhas = historico
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .slice(0, 10)
+          .map(d => `
+            <tr>
+              <td>${new Date(d.timestamp).toLocaleString()}</td>
+              <td>${d.chuva ? "🌧️ Sim" : "☀️ Não"}</td>
+              <td>${d.umidade ? "💧 Úmido" : "🌵 Seco"}</td>
+            </tr>
+          `).join("");
+
+        document.getElementById("tabelaHistorico").innerHTML = linhas;
+      } catch (e) {
+        document.getElementById("dadosUltimo").innerHTML = "Erro: " + e;
+      }
+    }
+
+    atualizar();
+    setInterval(atualizar, 3000);
+
+    // ===== MQTT =====
+    const broker = "wss://test.mosquitto.org:8081/mqtt";
+    const client = mqtt.connect(broker);
+
+    const subTopic = "grupoGabriel/dados";
+    const pubTopic = "grupoGabriel/cmd";
+
+    client.on("connect", () => {
+      console.log("Conectado ao broker MQTT");
+      client.subscribe(subTopic);
+    });
+
+    client.on("message", (topic, message) => {
+      if (topic === subTopic) {
+        const data = JSON.parse(message.toString());
+
+        if (data.status && data.status === "RESET_OK") {
+          document.getElementById("status").textContent = "LEDs resetados com sucesso!";
+        } else {
+          document.getElementById("dadosUltimo").innerHTML = 
+            "<pre>" + JSON.stringify(data, null, 2) + "</pre>";
+          document.getElementById("status").textContent = "Dados recebidos";
+        }
+      }
+    });
+
+    function resetarLeds() {
+      client.publish(pubTopic, "RESET_LEDS");
+      document.getElementById("status").textContent = "Enviando comando de reset...";
+      console.log("Comando RESET_LEDS enviado");
+    }
+  </script>
+</body>
+</html>
