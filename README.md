@@ -26,7 +26,6 @@ flowchart LR
 
   %% MQTT
   MQTT_PUB --> BROKER[(MQTT Broker)]
-  BROKER --> WEBPAGE[Web Dashboard]
   WEBPAGE -->|RESET_LEDS cmd| BROKER
   WEBPAGE -->|Fetch /get & /list| CF_POST
 ```
@@ -80,3 +79,4 @@ Histórico de leituras via GET /list.
 Última leitura via GET /last.
 
 Botão Reset LEDs, que envia um comando ao MQTT Broker (RESET_LEDS cmd), fazendo todos os LEDs piscarem simultaneamente como teste de funcionamento.
+
