@@ -19,9 +19,13 @@ flowchart LR
   %% LEDs em bloco separado
   subgraph LEDS [LED States]
     direction TB
-    LED_CTRL --> LED_1[Chuva AND Umidade = False]
-    LED_CTRL --> LED_2[Chuva OR Umidade = True]
-    LED_CTRL --> LED_3[Chuva AND Umidade = True]
+    LED_CTRL --> LED_1[SE Chuva AND Umidade = False]
+    LED_CTRL --> LED_2[SE Chuva OR Umidade = True]
+    LED_CTRL --> LED_3[SE Chuva AND Umidade = True]
+
+    LED_1 --> LED_VERDE{Liga LED Verde}
+    LED_2 --> LED_AMARELO{Liga LED Amarelo}
+    LED_3 --> LED_VERMELHO{Liga LED Vermelho}
   end
 
   %% MQTT
@@ -79,4 +83,5 @@ Histórico de leituras via GET /list.
 Última leitura via GET /last.
 
 Botão Reset LEDs, que envia um comando ao MQTT Broker (RESET_LEDS cmd), fazendo todos os LEDs piscarem simultaneamente como teste de funcionamento.
+
 
